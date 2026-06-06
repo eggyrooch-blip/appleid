@@ -12,6 +12,9 @@
 
 > **通用性 / 扩展性**：不绑定飞连/MDM（提供免 root 自助安装）、员工弱感知/无感知（身份自动解析、后台静默）、
 > 采集源与身份均可插拔。设计与扩展点见 [`ARCHITECTURE.md`](ARCHITECTURE.md)。
+>
+> **大厂参考（Meta）**：借鉴 Scribe 解耦 ingest、Scuba/Hive 热冷分层、PAI 按目的治理；
+> 并刻意**不做个人监控式排行榜**（默认团队维度）。见 [`BIG-TECH-PATTERNS.md`](BIG-TECH-PATTERNS.md)。
 
 ```
 每台 Mac (飞连下发):  tokscale --json ──> tokreport.py ──HTTPS──┐

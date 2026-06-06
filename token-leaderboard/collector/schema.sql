@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS usage_daily (
     cache_write_tokens  BIGINT        NOT NULL DEFAULT 0,
     total_tokens        BIGINT        NOT NULL DEFAULT 0,
     cost_usd            NUMERIC(14,6) NOT NULL DEFAULT 0,
+    -- 目的限制(借鉴 Meta PAI)：声明数据用途，便于按目的治理/审计。
+    purpose             TEXT          NOT NULL DEFAULT 'cost_allocation',
     updated_at          TIMESTAMPTZ   NOT NULL DEFAULT now(),
     PRIMARY KEY (email, usage_date, source, tool, model)
 );

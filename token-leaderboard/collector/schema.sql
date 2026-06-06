@@ -1,0 +1,34 @@
+-- 统一用量表：订阅制(客户端 tokscale)与 API(LiteLLM) 两路数据都落在这里。
+-- 通过主键做幂等 upsert：同一天/同人/同来源/同工具/同模型只保留一行，
+-- 客户端每次重传最近 N 天都会覆盖，离线补传/重复跑都不会重复计数。
+
+CREATE TABLE IF NOT EXISTS usage_daily (
+    email               TEXT          NOT NULL,
+    dept                TEXT          NOT NULL DEFAULT 'unknown',
+    usage_date          DATE          NOT NULL,
+    source              TEXT          NOT NULL,            -- 'subscription' | 'api'
+    tool                TEXT          NOT NULL,            -- claude_code | codex | cursor | gemini_cli | ...
+    model               TEXT          NOT NULL DEFAULT 'unknown',
+    input_tokens        BIGINT        NOT NULL DEFAULT 0,
+    output_tokens       BIGINT        NOT NULL DEFAULT 0,
+    cache_read_tokens   BIGINT        NOT NULL DEFAULT 0,
+    cache_write_tokens  BIGINT        NOT NULL DEFAULT 0,
+    total_tokens        BIGINT        NOT NULL DEFAULT 0,
+    cost_usd            NUMERIC(14,6) NOT NULL DEFAULT 0,
+    updated_at          TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    PRIMARY KEY (email, usage_date, source, tool, model)
+);
+
+CREATE INDEX IF NOT EXISTS idx_usage_daily_date   ON usage_daily (usage_date);
+CREATE INDEX IF NOT EXISTS idx_usage_daily_email  ON usage_daily (email);
+CREATE INDEX IF NOT EXISTS idx_usage_daily_dept   ON usage_daily (dept);
+CREATE INDEX IF NOT EXISTS idx_usage_daily_source ON usage_daily (source);
+
+-- 设备 -> 员工映射（可选）：如果你想由收集端而不是客户端来定身份，
+-- 飞连下发设备清单时写到这里，上报只带 device_id，收集端 JOIN 出 email。
+CREATE TABLE IF NOT EXISTS device_identity (
+    device_id   TEXT PRIMARY KEY,
+    email       TEXT NOT NULL,
+    dept        TEXT NOT NULL DEFAULT 'unknown',
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);

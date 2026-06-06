@@ -1,0 +1,38 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: tok
+      POSTGRES_PASSWORD: tok
+      POSTGRES_DB: tokleaderboard
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tok"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  collector:
+    build: .
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8088:8088"
+    command: uvicorn app:app --host 0.0.0.0 --port 8088
+
+  # 可选：本地起一套看板。若复用你现有 Grafana，可删掉这个 service。
+  grafana:
+    image: grafana/grafana:11.4.0
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafdata:/var/lib/grafana
+
+volumes:
+  pgdata:
+  grafdata:

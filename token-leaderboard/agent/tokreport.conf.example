@@ -1,0 +1,7 @@
+# 由飞连按设备下发到 /etc/tokreport.conf（每台机器填对应员工身份）
+EMPLOYEE_EMAIL=zhangsan@eggyroochgroup.com
+DEPT=infra
+COLLECTOR_URL=https://tok-collector.internal.eggyroochgroup.com
+COLLECTOR_TOKEN=replace-with-the-bearer-token-from-collector
+TOKSCALE_BIN=/usr/local/bin/tokscale
+LOOKBACK_DAYS=3

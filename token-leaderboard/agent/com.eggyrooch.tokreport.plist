@@ -10,7 +10,7 @@
     <key>ProgramArguments</key>
     <array>
         <string>/usr/bin/python3</string>
-        <string>/usr/local/bin/tokreport.py</string>
+        <string>/usr/local/lib/tokreport/tokreport.py</string>
     </array>
 
     <key>RunAtLoad</key>

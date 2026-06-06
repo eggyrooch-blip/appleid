@@ -45,6 +45,9 @@ class UsageRecord(BaseModel):
     usage_date: date
     tool: str
     model: str = "unknown"
+    # source 随 record 走（不写死），任意来源标签都可入库：
+    # 'subscription' | 'api' | 'cursor_admin' | 'bedrock' | ...，新增采集源无需改表/改接口。
+    source: str = Field(default="subscription", pattern="^[a-z0-9_]{1,32}$")
     input_tokens: int = 0
     output_tokens: int = 0
     cache_read_tokens: int = 0
@@ -56,7 +59,8 @@ class UsageRecord(BaseModel):
 class ReportPayload(BaseModel):
     email: str
     dept: str = "unknown"
-    source: str = Field(default="subscription", pattern="^(subscription|api)$")
+    # 兼容老客户端：可在 payload 顶层给默认 source，record 未带 source 时回退到它。
+    source: str = Field(default="subscription", pattern="^[a-z0-9_]{1,32}$")
     records: List[UsageRecord]
 
 
@@ -86,8 +90,9 @@ async def report(payload: ReportPayload) -> dict:
                 total = r.total_tokens or (
                     r.input_tokens + r.output_tokens + r.cache_read_tokens + r.cache_write_tokens
                 )
+                source = r.source or payload.source
                 await conn.execute(
-                    UPSERT, payload.email, payload.dept, r.usage_date, payload.source,
+                    UPSERT, payload.email, payload.dept, r.usage_date, source,
                     r.tool, r.model, r.input_tokens, r.output_tokens, r.cache_read_tokens,
                     r.cache_write_tokens, total, r.cost_usd,
                 )

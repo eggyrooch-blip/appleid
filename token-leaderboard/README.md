@@ -10,6 +10,9 @@
 
 两路统一落到 Postgres 同一张表 `usage_daily`，看板里合并出榜。cc-switch 保持不动，继续管配置切换。
 
+> **通用性 / 扩展性**：不绑定飞连/MDM（提供免 root 自助安装）、员工弱感知/无感知（身份自动解析、后台静默）、
+> 采集源与身份均可插拔。设计与扩展点见 [`ARCHITECTURE.md`](ARCHITECTURE.md)。
+
 ```
 每台 Mac (飞连下发):  tokscale --json ──> tokreport.py ──HTTPS──┐
                                                                 ├─> collector ─> Postgres ─> Grafana 排行榜
@@ -38,21 +41,32 @@ LiteLLM 同步（建一个每天的 cron / k8s CronJob）：
 DATABASE_URL=... LITELLM_BASE_URL=... LITELLM_MASTER_KEY=... python litellm_sync.py
 ```
 
-## 2. 下发客户端（飞连 MDM）
+## 2. 下发客户端（三选一，不绑定 MDM）
 
-打一个下发包，含 4 个文件：`tokscale`(pin 版本二进制)、`tokreport.py`、
-`com.eggyrooch.tokreport.plist`、`tokreport.conf`（**按设备填好 EMPLOYEE_EMAIL/DEPT**）。
+客户端是**可插拔采集源 + 自动身份解析**的 sidecar，员工弱感知/无感知。详见
+[`ARCHITECTURE.md`](ARCHITECTURE.md)。身份按优先级自动取：MDM 下发的 `EMPLOYEE_EMAIL`
+→ `git config user.email`（零输入自动归属）→ 登录名@域名。
 
-飞连以 root 执行：
+**A. 有 MDM / 飞连**（root，按设备下发身份，最稳）
 ```bash
-sudo ./install.sh <下发包目录>
+sudo ./install.sh <下发包目录>   # 含 collectors/、identity.py、tokreport.py、plist、conf、(可选)tokscale
 ```
-脚本会把二进制/脚本装好、配置写到 `/etc/tokreport.conf`、并在**登录用户的用户域**加载
-LaunchAgent（必须用户域才能读到该用户的 `~/.claude`、`~/.codex`）。每天 19:00 自动上报。
+
+**B. 没有 MDM**（免 root，员工执行一次，之后静默后台跑）
+```bash
+curl -fsSL https://intranet/tok/bootstrap.sh | \
+  COLLECTOR_URL=https://<collector> COLLECTOR_TOKEN=xxx BASE_URL=https://intranet/tok bash
+```
+默认用 `claude_code` 采集源（**免分发二进制**）；想用 tokscale 覆盖全量工具，加 `COLLECTORS=tokscale`。
+
+**C. 随装机/ dotfiles 捆绑**：把 B 的步骤并进你现有的开发环境初始化脚本即可。
+
+> 采集源由 `COLLECTORS=` 控制（`tokscale` 一把覆盖 25+ 工具，需二进制；`claude_code` 零依赖）。
+> 加新工具只需在 `agent/collectors/` 写一个类并登记，见 ARCHITECTURE.md。
 
 手动验证一次：
 ```bash
-TOKREPORT_CONF=/etc/tokreport.conf python3 /usr/local/bin/tokreport.py
+TOKREPORT_CONF=/etc/tokreport.conf python3 /usr/local/lib/tokreport/tokreport.py
 curl -H "Authorization: Bearer <token>" "https://<collector>/v1/leaderboard?days=7"
 ```
 
@@ -63,8 +77,8 @@ Grafana 加 Postgres 数据源后导入 `dashboard/grafana-dashboard.json`，
 
 ## 落地注意事项（重要）
 
-- **身份归属是排行榜的根**：靠飞连按设备把 `EMPLOYEE_EMAIL` 写进 `/etc/tokreport.conf`。
-  也可改成上报 `device_id`、由收集端 `device_identity` 表 JOIN 出 email。
+- **身份归属是排行榜的根**：自动解析（MDM 下发 `EMPLOYEE_EMAIL` → `git config user.email` →
+  登录名@域名），没有 MDM 也能零输入归属；逻辑集中在 `agent/identity.py`，想换 SSO/`device_id` 只改这一处。
 - **幂等**：客户端每次重传最近 `LOOKBACK_DAYS` 天、LiteLLM 同样回看几天，
   收集端按 `(email,date,source,tool,model)` upsert，离线补传/重复跑都不会重复计数。
 - **隐私合规**：只采集 token 计数/成本/模型/时间，**不读取也不上传 prompt 或代码**。上线前与安全/法务对齐。

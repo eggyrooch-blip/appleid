@@ -1,0 +1,61 @@
+# 架构与扩展点
+
+设计目标：**任意企业可复用**（不绑定飞连/MDM）、**员工弱感知/无感知**、**强扩展性**。
+核心做法是把每个可变部分都收敛成一个清晰的「扩展缝」，新增能力只动一处。
+
+```
+[ 采集源 collectors ]      [ 身份 identity ]
+  tokscale ─┐                git email / SSO / MDM / 兜底
+  claude_code┤                       │
+  (你的新源) ┘                       ▼
+        └──► 归一化 record ──► [ sink ] ──► [ collector API ] ──► [ 存储 ] ──► [ 看板 ]
+             (统一契约)         HTTP/DB       /v1/usage/report     Postgres     Grafana
+```
+
+## 1. 归一化 record —— 整个系统的稳定契约
+
+所有来源最终都产出同一种 record（见 `agent/collectors/base.py` 注释）：
+`usage_date, source, tool, model, input/output/cache_* _tokens, total_tokens, cost_usd`。
+收集端、表结构、看板都只依赖它。**只要新来源能产出这个形状，就能接入，无需改下游。**
+
+## 2. 采集源 collectors（可插拔）
+
+- 接口：`agent/collectors/base.py: UsageCollector`（`available()` + `collect(day)`）。
+- 已带：`tokscale`（一把覆盖 25+ 工具）、`claude_code`（零依赖，参考实现）。
+- **加一个新工具**：写 `xxx_collector.py` 实现接口 → 在 `collectors/__init__.py: REGISTRY` 登记一行 →
+  配置 `COLLECTORS=...,xxx`。例如 codex/gemini 的直读、或读公司其它工具。
+- 客户端按机器能力自动跳过不具备条件的源（`available()`），所以一份配置可全公司通发。
+
+## 3. 身份 identity（支持零输入）
+
+`agent/identity.py: resolve()` 按优先级：环境变量 → 配置(MDM下发) → `git config user.email` → 登录名@域名。
+- **有 MDM**：下发 `EMPLOYEE_EMAIL`，强归属。
+- **无 MDM**：留空即自动用 git email，员工零操作。
+- 想换成 SSO/OIDC、或上报 `device_id` 由收集端 `device_identity` 表 JOIN —— 只改这一个文件。
+
+## 4. source 维度（来源可任意扩展）
+
+收集端 `usage_daily.source` 是自由标签（`^[a-z0-9_]{1,32}$`）：`subscription`/`api`/
+`cursor_admin`/`bedrock`/…。新增一路服务端采集（如 Cursor Admin API、Bedrock CloudWatch）
+只要把数据 upsert 进 `usage_daily` 用新 source 即可，看板自动多一类，无需改 schema。
+
+## 5. sink / 存储 / 看板
+
+- sink 当前是 HTTP（`/v1/usage/report`）；要换 Kafka/直写 DB/S3，只改 `tokreport.py: post()`。
+- 存储是 Postgres，表是通用宽表；量级上来可平替 ClickHouse，契约不变。
+- 看板是 Grafana（SQL 面板），换 Metabase/Superset 同理，读同一张表。
+
+## 部署模式（任选，互不排斥）
+
+| 模式 | 适用 | 入口 |
+|---|---|---|
+| MDM / 飞连 | 有统一终端管理 | `agent/install.sh`（root，按设备下发身份） |
+| 无 MDM 自助 | 没有 MDM 的企业 | `agent/bootstrap.sh`（`curl\|bash`，免 root，git email 自动归属） |
+| 随开发环境捆绑 | 已有 dotfiles/装机脚本 | 把 bootstrap 步骤并进现有装机流程 |
+
+## 弱感知 / 无感知
+
+- 客户端是 LaunchAgent 后台静默跑，无弹窗、无交互，日志写 `/tmp/tokreport.*`。
+- 身份自动解析 → 员工无需任何录入。
+- 合规提醒：无感知采集涉及员工数据，**上线前必须与安全/法务/HR 对齐并按当地法规告知**；
+  只采 token 计数、绝不采 prompt/代码，是降低合规风险的基本前提。

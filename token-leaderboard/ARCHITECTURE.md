@@ -12,6 +12,15 @@
              (统一契约)         HTTP/DB       /v1/usage/report     Postgres     Grafana
 ```
 
+## 0.5 两个指标族，同一套架构
+
+- **token 量**（花了多少）→ 表 `usage_daily`，入口 `/v1/usage/report`，来源 tokscale / LiteLLM。
+- **代码产出**（采纳率 / 有效代码行）→ 表 `code_daily`，入口 `/v1/code/report`，来源 Cursor Admin API /
+  Claude Code OTEL / git 存活分析。详见 [`CODE-METRICS.md`](CODE-METRICS.md)。
+
+两族共用同样的扩展缝（来源可插拔、source 自由标签、身份/sink/存储/看板可替换），
+所以「再加一类指标」也只是再加一张宽表 + 一个 ingest 入口，下游照旧。
+
 ## 1. 归一化 record —— 整个系统的稳定契约
 
 所有来源最终都产出同一种 record（见 `agent/collectors/base.py` 注释）：

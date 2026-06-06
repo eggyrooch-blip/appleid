@@ -21,7 +21,11 @@ install -d "$LIB_DIR" "$LIB_DIR/collectors"
 install -m 0755 "$PKG_DIR/tokreport.py" "$LIB_DIR/tokreport.py"
 install -m 0644 "$PKG_DIR/identity.py"  "$LIB_DIR/identity.py"
 install -m 0644 "$PKG_DIR"/collectors/*.py "$LIB_DIR/collectors/"
-[ -f "$PKG_DIR/tokscale" ] && install -m 0755 "$PKG_DIR/tokscale" /usr/local/bin/tokscale || true
+[ -f "$PKG_DIR/tokscale" ] && {
+  install -m 0755 "$PKG_DIR/tokscale" /usr/local/bin/tokscale
+  # 去掉下载隔离属性，否则 Gatekeeper 会拦未签名二进制
+  xattr -dr com.apple.quarantine /usr/local/bin/tokscale 2>/dev/null || true
+} || true
 
 # 2) 配置（飞连按设备替换好 EMPLOYEE_EMAIL 等；不填则自动用 git email）
 install -m 0644 "$PKG_DIR/tokreport.conf" /etc/tokreport.conf

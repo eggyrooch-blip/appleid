@@ -99,6 +99,59 @@ async def report(payload: ReportPayload) -> dict:
     return {"ok": True, "upserted": len(payload.records)}
 
 
+class CodeRecord(BaseModel):
+    usage_date: date
+    tool: str
+    source: str = Field(default="cursor", pattern="^[a-z0-9_]{1,32}$")
+    lines_suggested: int = 0
+    lines_accepted: int = 0
+    lines_added: int = 0
+    lines_removed: int = 0
+    suggestions_shown: int = 0
+    suggestions_accepted: int = 0
+    commits: int = 0
+    lines_surviving: int = 0
+
+
+class CodeReportPayload(BaseModel):
+    email: str
+    dept: str = "unknown"
+    records: List[CodeRecord]
+
+
+CODE_UPSERT = """
+INSERT INTO code_daily (email, dept, usage_date, source, tool,
+    lines_suggested, lines_accepted, lines_added, lines_removed,
+    suggestions_shown, suggestions_accepted, commits, lines_surviving, updated_at)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13, now())
+ON CONFLICT (email, usage_date, source, tool) DO UPDATE SET
+    dept=EXCLUDED.dept,
+    lines_suggested=EXCLUDED.lines_suggested,
+    lines_accepted=EXCLUDED.lines_accepted,
+    lines_added=EXCLUDED.lines_added,
+    lines_removed=EXCLUDED.lines_removed,
+    suggestions_shown=EXCLUDED.suggestions_shown,
+    suggestions_accepted=EXCLUDED.suggestions_accepted,
+    commits=EXCLUDED.commits,
+    lines_surviving=EXCLUDED.lines_surviving,
+    updated_at=now();
+"""
+
+
+@app.post("/v1/code/report", dependencies=[Depends(require_token)])
+async def code_report(payload: CodeReportPayload) -> dict:
+    assert _pool is not None
+    async with _pool.acquire() as conn:
+        async with conn.transaction():
+            for r in payload.records:
+                await conn.execute(
+                    CODE_UPSERT, payload.email, payload.dept, r.usage_date, r.source, r.tool,
+                    r.lines_suggested, r.lines_accepted, r.lines_added, r.lines_removed,
+                    r.suggestions_shown, r.suggestions_accepted, r.commits, r.lines_surviving,
+                )
+    return {"ok": True, "upserted": len(payload.records)}
+
+
 @app.get("/v1/leaderboard", dependencies=[Depends(require_token)])
 async def leaderboard(days: int = 30, source: str = "all", limit: int = 100) -> dict:
     assert _pool is not None

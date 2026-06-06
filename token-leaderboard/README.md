@@ -15,6 +15,9 @@
 >
 > **大厂参考（Meta）**：借鉴 Scribe 解耦 ingest、Scuba/Hive 热冷分层、PAI 按目的治理；
 > 并刻意**不做个人监控式排行榜**（默认团队维度）。见 [`BIG-TECH-PATTERNS.md`](BIG-TECH-PATTERNS.md)。
+>
+> **代码产出指标**：除 token 量外，还可统计 AI 代码**采纳率 / 有效代码行数**
+> （Cursor Admin API + Claude Code OTEL + git 存活分析），同架构第二指标族，见 [`CODE-METRICS.md`](CODE-METRICS.md)。
 
 ```
 每台 Mac (飞连下发):  tokscale --json ──> tokreport.py ──HTTPS──┐

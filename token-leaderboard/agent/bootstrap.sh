@@ -13,7 +13,7 @@ set -euo pipefail
 : "${COLLECTOR_URL:?need COLLECTOR_URL}"
 : "${COLLECTOR_TOKEN:?need COLLECTOR_TOKEN}"
 : "${BASE_URL:?need BASE_URL (where agent files are hosted)}"
-COLLECTORS="${COLLECTORS:-claude_code}"
+COLLECTORS="${COLLECTORS:-tokscale}"   # 默认 tokscale，一把覆盖 25+ 工具
 
 LIB="$HOME/.local/share/tokreport"
 CONF="$HOME/.config/tokreport.conf"
@@ -31,6 +31,7 @@ done
 # 默认 claude_code 免二进制；若用 tokscale 采集源，再拉二进制
 if [[ "$COLLECTORS" == *tokscale* ]]; then
   curl -fsSL "$BASE_URL/tokscale" -o "$LIB/tokscale" && chmod +x "$LIB/tokscale"
+  xattr -dr com.apple.quarantine "$LIB/tokscale" 2>/dev/null || true  # 过 Gatekeeper
 fi
 
 cat > "$CONF" <<EOF

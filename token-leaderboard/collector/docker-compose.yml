@@ -23,7 +23,8 @@ services:
       - "8088:8088"
     command: uvicorn app:app --host 0.0.0.0 --port 8088
 
-  # 可选：本地起一套看板。若复用你现有 Grafana，可删掉这个 service。
+  # 可选进阶看板。MVP 直接看 collector 的 / 自带看板即可；这里自动挂好数据源+面板。
+  # 若复用你现有 Grafana，可删掉这个 service。
   grafana:
     image: grafana/grafana:11.4.0
     ports:
@@ -32,6 +33,8 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: admin
     volumes:
       - grafdata:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ../dashboard:/var/lib/grafana/dashboards
 
 volumes:
   pgdata:

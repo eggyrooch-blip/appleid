@@ -28,10 +28,22 @@ LiteLLM ──(litellm_sync.py 定时拉)─────────────
 ## 目录
 
 ```
-collector/   收集端：FastAPI + Postgres + LiteLLM 同步脚本（docker-compose 一键起）
-agent/       客户端 sidecar：tokreport.py + launchd plist + 配置模板 + 飞连安装脚本
-dashboard/   排行榜 SQL + Grafana 面板 JSON
+collector/   收集端：FastAPI + Postgres + 自带看板(/) + LiteLLM/Cursor 同步脚本（compose 一键起）
+agent/       客户端 sidecar：tokreport.py + 可插拔采集源 + launchd plist + MDM/自助安装 + 打包脚本
+dashboard/   排行榜 SQL + Grafana 面板 JSON（进阶；MVP 用收集端自带看板即可）
 ```
+
+## MVP 快速验收（5 分钟，先看到东西再铺开）
+
+```bash
+cd collector
+cp .env.example .env                          # 至少设 COLLECTOR_API_TOKENS=devtoken
+docker compose up -d                          # 起 postgres + collector(:8088) + grafana(:3000)
+COLLECTOR_URL=http://localhost:8088 COLLECTOR_TOKEN=devtoken python seed_demo.py   # 灌样例数据
+open http://localhost:8088/                    # ← 自带看板：个人/部门 Token 榜 + 采纳率，无需 Grafana
+```
+看板这一路是**实测跑通**的（ingest → Postgres → `/` 看板，幂等 upsert 已验证）。确认没问题后，
+按下面「下发客户端」把真实数据通过 MDM 接进来；`seed_demo.py` 仅用于演示，正式环境不用。
 
 ## 1. 起收集端
 
@@ -53,10 +65,15 @@ DATABASE_URL=... LITELLM_BASE_URL=... LITELLM_MASTER_KEY=... python litellm_sync
 [`ARCHITECTURE.md`](ARCHITECTURE.md)。身份按优先级自动取：MDM 下发的 `EMPLOYEE_EMAIL`
 → `git config user.email`（零输入自动归属）→ 登录名@域名。
 
-**A. 有 MDM / 飞连**（root，按设备下发身份，最稳）
+**A. 有 MDM / 飞连**（root，按设备下发身份，最稳）—— **MVP 主路径**
 ```bash
-sudo ./install.sh <下发包目录>   # 含 collectors/、identity.py、tokreport.py、plist、conf、(可选)tokscale
+# 1) 在你的机器上一键打包（含 tokscale 二进制 + 已填好的 conf）：
+agent/package_mdm.sh ./tokscale https://<collector> <token> ./dist
+# 2) 把 dist/tokreport-mdm.tar.gz 交给飞连/JAMF 下发，目标机解包后以 root 执行：
+sudo ./install.sh .
 ```
+脚本会装好程序+二进制(自动过 Gatekeeper)、写 `/etc/tokreport.conf`、在用户域加载 LaunchAgent
+（每天 19:00 静默上报）。身份留空则自动用 git email，无需逐台填。
 
 **B. 没有 MDM**（免 root，员工执行一次，之后静默后台跑）
 ```bash
@@ -76,10 +93,12 @@ TOKREPORT_CONF=/etc/tokreport.conf python3 /usr/local/lib/tokreport/tokreport.py
 curl -H "Authorization: Bearer <token>" "https://<collector>/v1/leaderboard?days=7"
 ```
 
-## 3. 看板
+## 3. 看板（展示）
 
-Grafana 加 Postgres 数据源后导入 `dashboard/grafana-dashboard.json`，
-或直接用 `dashboard/leaderboard.sql` 里的查询。
+- **最简（MVP）**：直接打开收集端自带看板 **`http://<collector>:8088/`** —— 个人/部门 Token 榜、
+  工具维度、代码采纳率，零额外部署。`?days=7|30|90` 切换窗口。
+- **进阶**：`docker compose` 已自动给 Grafana 挂好数据源与面板（`:3000`，admin/admin）；
+  或手动用 `dashboard/leaderboard.sql` 里的查询自建。
 
 ## 落地注意事项（重要）
 

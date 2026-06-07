@@ -5,3 +5,5 @@
 !Canada/
 !token-leaderboard/
 !token-leaderboard/**
+token-leaderboard/**/__pycache__/
+token-leaderboard/**/*.pyc
